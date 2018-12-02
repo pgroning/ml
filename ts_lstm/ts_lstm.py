@@ -10,6 +10,7 @@ from tensorflow.python.keras.layers import LSTM
 from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.layers import Bidirectional
 from tensorflow.python.keras.layers import Dropout
+from tensorflow.python.keras.layers import Activation
 from tensorflow.python.keras.optimizers import SGD
 import matplotlib.pyplot as plt
 
@@ -99,22 +100,27 @@ def split_sequence2(sequence, n_steps_in, n_steps_out):
     return array(X), array(y)
     #return X, y
     
-def lstm_model(n_steps_in, n_steps_out, n_features, n_units=50, n_layers=1):
+def build_model(n_steps_in, n_steps_out, n_features, n_units=50, n_layers=1):
 
     model = Sequential()
     if n_layers == 1:
-        layer1 = LSTM(n_units, activation='relu', input_shape=(n_steps_in, n_features))
+        model.add(LSTM(n_units, activation='relu',
+                      input_shape=(n_steps_in, n_features)))
         #layerBi = Bidirectional(layer1)
-        model.add(layer1)
-        #model.add(Dropout(0.2))
+        #model.add(layerBi)
     else:
-        layer1 = LSTM(n_units, activation='relu', return_sequences=True, input_shape=(n_steps_in, n_features))
-        model.add(layer1)
+        for i in range(n_layers):
+            model.add(LSTM(100, activation='relu', return_sequences=True,
+                           input_shape=(n_steps_in, n_features)))
+            model.add(Dropout(0.0))
+            
         model.add(LSTM(n_units, activation='relu'))
 
-    model.add(Dense(n_steps_out))
-
-    optimizer = SGD(lr=0.5, decay=1e-6, momentum=0.1, nesterov=True)
+    model.add(Dropout(0.0))
+    model.add(Dense(units=n_steps_out))
+    model.add(Activation('linear'))
+    
+    #optimizer = SGD(lr=0.5, decay=1e-6, momentum=0.1, nesterov=True)
     #model.compile(optimizer=optimizer, loss='mse')
     model.compile(optimizer='adam', loss='mse')
 
@@ -125,23 +131,25 @@ def main():
 
     #df = read_data()
     #ts_components = decompose(df)
+    #set_trace()
     #trend_forecast = forecast_trend(ts_components.trend.dropna())
     #y = subtract_trend(ts_components, trend_forecast)
     #y.to_csv('y_subtract.csv')
 
-    df = pd.read_csv('y_seasonal.csv')
+    df = pd.read_csv('y_trend.csv')
+    #df = pd.read_csv('y_div_trend.csv')  # (y - y.trend) / y.trend
     df.set_index('Date', inplace=True)
     df.index = pd.DatetimeIndex(df.index)
     #df.plot()
     #plt.show()
     
     # Scaling data
-    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaler = MinMaxScaler(feature_range=(-1, 1))
     data = scaler.fit_transform(df).flatten()
     
     # Prepare univariate data for modeling
-    n_steps_in = 7
-    n_steps_out = 30
+    n_steps_in = 28
+    n_steps_out = 100
     #X, y = split_sequence(data, n_steps_in)
     X, y = split_sequence2(data, n_steps_in, n_steps_out)
 
@@ -150,8 +158,9 @@ def main():
     #set_trace()
 
     # Setup model
+    # 50, 400
     n_features = 1
-    model = lstm_model(n_steps_in, n_steps_out, n_features, n_units=400, n_layers=1)
+    model = build_model(n_steps_in, n_steps_out, n_features, n_units=400, n_layers=2)
     
     # Add dimensions for features
     X_reshaped = X.reshape((X.shape[0], X.shape[1], n_features))
@@ -172,6 +181,16 @@ def main():
     print('y_hat = ', scaler.inverse_transform(y_hat).flatten())
     #print(df['Y'][-n_steps-1:])
     print('y = ', df['Y'][-n_steps_in:])
+    
+    # Store forecast in Pandas dataframe
+    Y_hat = scaler.inverse_transform(y_hat).flatten()
+    dt_range = pd.date_range(df['Y'].index[-1], periods=n_steps_out+1)[1:]
+    df_yhat = pd.DataFrame(Y_hat.transpose(), columns=['Y_hat'], index=dt_range)
+
+    # Plot results
+    ax = df[-400:].plot(c='b')
+    df_yhat.plot(c='r', ax=ax)
+    plt.show()
     set_trace()
     
 
