@@ -24,15 +24,15 @@ with warnings.catch_warnings():
 
 
 def read_data():
-    df = pd.read_csv('../ts_xgb/data/12.csv')
+    df = pd.read_csv('../ts_xgb/data/10_164.csv')
     df = df.loc[:, 'Date':'Y']
     df.set_index('Date', inplace=True)
     df.index = pd.DatetimeIndex(df.index)
     return df
 
 
-def decompose(df):
-    ts_components = sm.tsa.seasonal_decompose(df)
+def decompose(df, model='additive'):
+    ts_components = sm.tsa.seasonal_decompose(df, model)
     ts_components.plot()
     plt.show()
     return ts_components
@@ -101,20 +101,22 @@ def split_sequence2(sequence, n_steps_in, n_steps_out):
     return array(X), array(y)
     #return X, y
     
-def build_model(n_steps_in, n_steps_out, n_features, n_units=50, n_layers=1):
+def build_model(n_steps_in, n_steps_out, n_features, n_units):
 
+    n_layers = len(n_units)
+    
     model = Sequential()
     if n_layers == 1:
-        model.add(LSTM(n_units, activation='relu',
+        model.add(LSTM(n_units[0], activation='relu',
                       input_shape=(n_steps_in, n_features)))
         #layerBi = Bidirectional(layer1)
         #model.add(layerBi)
     else:
         for i in range(n_layers - 1):
-            model.add(LSTM(100, activation='relu', return_sequences=True,
+            model.add(LSTM(n_units[i], activation='relu', return_sequences=True,
                            input_shape=(n_steps_in, n_features)))
             model.add(Dropout(0.2))
-        model.add(LSTM(n_units, activation='relu'))
+        model.add(LSTM(n_units[-1], activation='relu'))
 
     model.add(Dropout(0.2))
     model.add(Dense(units=n_steps_out))
@@ -130,17 +132,20 @@ def build_model(n_steps_in, n_steps_out, n_features, n_units=50, n_layers=1):
 def main():
 
     #df = read_data()
-    #ts_components = decompose(df)
+    #ts_components = decompose(df, model='additive')
     #set_trace()
     #trend_forecast = forecast_trend(ts_components.trend.dropna())
     #y = subtract_trend(ts_components, trend_forecast)
     #y.to_csv('y_subtract.csv')
 
-    df = pd.read_csv('y_observed.csv')
+    #df = pd.read_csv('y_observed.csv')
     #df = pd.read_csv('y_trend.csv')
     #df = pd.read_csv('y_sub_trend.csv')
     #df = pd.read_csv('y_seasonal+resid.csv')
-
+    #df = pd.read_csv('10_164_trend.csv')
+    df = pd.read_csv('10_164_seasonal+resid.csv')
+    #df = pd.read_csv('10_164_observed.csv')
+    
     df.set_index('Date', inplace=True)
     df.index = pd.DatetimeIndex(df.index)
     #df.plot()
@@ -162,14 +167,14 @@ def main():
     # Setup model
     n_features = 1
     model = build_model(n_steps_in, n_steps_out, n_features,
-                        n_units=400, n_layers=2)
+                        n_units=[50, 250])
     
     # Add dimensions for features
     X_reshaped = X.reshape((X.shape[0], X.shape[1], n_features))
 
     # Train model
     #model.fit(X_reshaped, y, epochs=500, verbose=1)
-    model.fit(X_reshaped, y, epochs=2000, batch_size=400, verbose=1)
+    model.fit(X_reshaped, y, epochs=5000, batch_size=400, verbose=1)
     
     # Make single step prediction
     x_input = data[-n_steps_in:]
