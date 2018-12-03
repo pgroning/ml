@@ -3,6 +3,7 @@ from pdb import set_trace
 import warnings
 #warnings.filterwarnings("ignore")
 
+import numpy as np
 from numpy import array
 import pandas as pd
 from tensorflow.python.keras.models import Sequential
@@ -109,14 +110,13 @@ def build_model(n_steps_in, n_steps_out, n_features, n_units=50, n_layers=1):
         #layerBi = Bidirectional(layer1)
         #model.add(layerBi)
     else:
-        for i in range(n_layers):
+        for i in range(n_layers - 1):
             model.add(LSTM(100, activation='relu', return_sequences=True,
                            input_shape=(n_steps_in, n_features)))
-            model.add(Dropout(0.0))
-            
+            model.add(Dropout(0.2))
         model.add(LSTM(n_units, activation='relu'))
 
-    model.add(Dropout(0.0))
+    model.add(Dropout(0.2))
     model.add(Dense(units=n_steps_out))
     model.add(Activation('linear'))
     
@@ -136,38 +136,40 @@ def main():
     #y = subtract_trend(ts_components, trend_forecast)
     #y.to_csv('y_subtract.csv')
 
-    df = pd.read_csv('y_trend.csv')
-    #df = pd.read_csv('y_div_trend.csv')  # (y - y.trend) / y.trend
+    df = pd.read_csv('y_observed.csv')
+    #df = pd.read_csv('y_trend.csv')
+    #df = pd.read_csv('y_sub_trend.csv')
+    #df = pd.read_csv('y_seasonal+resid.csv')
+
     df.set_index('Date', inplace=True)
     df.index = pd.DatetimeIndex(df.index)
     #df.plot()
     #plt.show()
+
+    # log transform data
+    #df['Y'] = np.log(df['Y'])
     
     # Scaling data
     scaler = MinMaxScaler(feature_range=(-1, 1))
     data = scaler.fit_transform(df).flatten()
     
     # Prepare univariate data for modeling
-    n_steps_in = 28
-    n_steps_out = 100
+    n_steps_in = 1
+    n_steps_out = 365
     #X, y = split_sequence(data, n_steps_in)
     X, y = split_sequence2(data, n_steps_in, n_steps_out)
 
-    #for i in range(len(X)):
-    #    print(X[i], y[i])
-    #set_trace()
-
     # Setup model
-    # 50, 400
     n_features = 1
-    model = build_model(n_steps_in, n_steps_out, n_features, n_units=400, n_layers=2)
+    model = build_model(n_steps_in, n_steps_out, n_features,
+                        n_units=400, n_layers=2)
     
     # Add dimensions for features
     X_reshaped = X.reshape((X.shape[0], X.shape[1], n_features))
 
     # Train model
-    model.fit(X_reshaped, y, epochs=100, verbose=1)
-    #model.fit(X_reshaped, y, epochs=100, batch_size=1, verbose=1)
+    #model.fit(X_reshaped, y, epochs=500, verbose=1)
+    model.fit(X_reshaped, y, epochs=2000, batch_size=400, verbose=1)
     
     # Make single step prediction
     x_input = data[-n_steps_in:]
@@ -188,7 +190,7 @@ def main():
     df_yhat = pd.DataFrame(Y_hat.transpose(), columns=['Y_hat'], index=dt_range)
 
     # Plot results
-    ax = df[-400:].plot(c='b')
+    ax = df[:].plot(c='b')
     df_yhat.plot(c='r', ax=ax)
     plt.show()
     set_trace()
