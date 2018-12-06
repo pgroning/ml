@@ -72,18 +72,20 @@ def split_sequence(sequence, n_steps_in, n_steps_out):
     X, y = list(), list()
     for i in range(len(sequence)):
         end_ix = i + n_steps_in
-        out_end_ix = end_ix + n_steps_out
+        #out_end_ix = end_ix + n_steps_out
         # Check if we have reached the end of sequence
-        if out_end_ix > len(sequence):
+        if end_ix > len(sequence):
             break
-
-        seq_x = sequence[i:end_ix]
-        seq_y = sequence[end_ix:out_end_ix]
+        #if out_end_ix > len(sequence):
+        #    break
+        
+        seq_x = sequence[i:end_ix, :-1]
+        seq_y = sequence[end_ix-1, -1]
         X.append(seq_x)
         y.append(seq_y)
 
     return array(X), array(y)
-    #return X, y
+
     
 def build_model(n_steps_in, n_steps_out, n_features, n_units):
 
@@ -122,16 +124,8 @@ def main():
     #y = subtract_trend(ts_components, trend_forecast)
     #y.to_csv('y_subtract.csv')
 
-    df = pd.read_csv('12_trend_multi.csv')
-    #df = pd.read_csv('12_seas_resid_multi.csv')
-    #df = pd.read_csv('y_observed.csv')
-    #df = pd.read_csv('y_trend.csv')
-    #df = pd.read_csv('y_sub_trend.csv')
-    #df = pd.read_csv('y_seasonal+resid.csv')
-    #df = pd.read_csv('10_164_trend.csv')
-    #df = pd.read_csv('12_stl_seasres.csv')
-    #df = pd.read_csv('12_stl_trend.csv')
-    #df = pd.read_csv('10_164_observed.csv')
+    #df = pd.read_csv('12_trend_multi.csv')
+    df = pd.read_csv('12_seas_resid_multi.csv')
     
     df.set_index('Date', inplace=True)
     df.index = pd.DatetimeIndex(df.index)
@@ -144,35 +138,38 @@ def main():
     # Scaling data
     scaler = MinMaxScaler(feature_range=(-1, 1))
     data = scaler.fit_transform(df).flatten()
+
+    # Adding regressors
+    xog = np.linspace(0, 1, len(data))
+
+    # shift data one step
+    data_shift = np.empty(len(data))
+    data_shift[:-1] = data[1:]
+    dataset = np.hstack((data.reshape(len(data), 1), xog.reshape(len(xog), 1), data_shift.reshape(len(data_shift), 1)))
+    dataset = dataset[:-1, :]
     
     # Prepare univariate data for modeling
     n_steps_in = 1
-    n_steps_out = 200
-    X, y = split_sequence(data, n_steps_in, n_steps_out)
+    n_steps_out = 1
+    X, y = split_sequence(dataset, n_steps_in, n_steps_out)
 
+    #for i in range(len(X)):
+    #    print(X[i], y[i])
+    
     # Setup model
-    n_features = 1
+    n_features = X.shape[2]
     model = build_model(n_steps_in, n_steps_out, n_features,
                         n_units=[100, 400])
     
-    # Add dimensions for features
-    X_reshaped = X.reshape((X.shape[0], X.shape[1], n_features))
-
     # Train model
-    #model.fit(X_reshaped, y, epochs=500, verbose=1)
-    model.fit(X_reshaped, y, epochs=1000, batch_size=400, verbose=1)
+    model.fit(X, y, epochs=1000, batch_size=400, verbose=1)
     
     # Make single step prediction
-    x_input = data[-n_steps_in:]
+    x_input = dataset[-n_steps_in:, :-1]
     x_input = x_input.reshape((1, n_steps_in, n_features))
-    #x_input = array(df['Y'][-n_steps-1:-1])
-    #x_input = x_input.reshape((1, n_steps, n_features))
     y_hat = model.predict(x_input, verbose=0)
-    #print('y_hat=', y_hat)
-    #print(data[-7:])
     print('----')
     print('y_hat = ', scaler.inverse_transform(y_hat).flatten())
-    #print(df['Y'][-n_steps-1:])
     print('y = ', df['Y'][-n_steps_in:])
     
     # Store forecast in Pandas dataframe
@@ -181,12 +178,9 @@ def main():
     df_yhat = pd.DataFrame(Y_hat.transpose(), columns=['Y_hat'], index=dt_range)
 
     # Plot results
-    #df['Y'] = np.exp(df['Y'])
-    #df_yhat = np.exp(df_yhat)
-
-    ax = df[:].plot(c='b')
-    df_yhat.plot(c='r', ax=ax)
-    plt.show()
+    #ax = df[:].plot(c='b')
+    #df_yhat.plot(c='r', ax=ax)
+    #plt.show()
     set_trace()
     
 
