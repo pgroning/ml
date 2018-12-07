@@ -32,7 +32,7 @@ def read_data():
     return df
 
 
-def decompose(df, model='additive'):
+def decompose(df, model='multiplicative'):
     ts_components = sm.tsa.seasonal_decompose(df, model)
     ts_components.plot()
     plt.show()
@@ -86,24 +86,31 @@ def split_sequence(sequence, n_steps_in, n_steps_out):
     return array(X), array(y)
 
     
-def build_model(n_steps_in, n_steps_out, n_features, n_units):
+def build_model(n_steps_in, n_steps_out, n_features, n_units, bidir=True, dropout=0.2):
 
     n_layers = len(n_units)
     
     model = Sequential()
     if n_layers == 1:
-        model.add(LSTM(n_units[0], activation='relu',
-                      input_shape=(n_steps_in, n_features)))
-        #layerBi = Bidirectional(layer1)
-        #model.add(layerBi)
+        layer = LSTM(n_units[0], activation='relu', input_shape=(n_steps_in, n_features))
+        if bidir:
+            layer = Bidirectional(layer)
+        model.add(layer)
     else:
+        layers = list()
         for i in range(n_layers - 1):
-            model.add(LSTM(n_units[i], activation='relu', return_sequences=True,
-                           input_shape=(n_steps_in, n_features)))
-            model.add(Dropout(0.1))
-        model.add(LSTM(n_units[-1], activation='relu'))
+            layers.append(LSTM(n_units[i], activation='relu', return_sequences=True, input_shape=(n_steps_in, n_features)))
+            if bidir:
+                layers[-1] = Bidirectional(layers[-1])
+            model.add(layers[-1])
+            model.add(Dropout(dropout))
 
-    model.add(Dropout(0.1))
+        layers.append(LSTM(n_units[-1], activation='relu'))
+        if bidir:
+            layers[-1] = Bidirectional(layers[-1])
+        model.add(layers[-1])
+
+    model.add(Dropout(dropout))
     model.add(Dense(units=n_steps_out))
     model.add(Activation('linear'))
     
@@ -125,7 +132,8 @@ def main():
 
     #df = pd.read_csv('y_observed.csv')
     #df = pd.read_csv('12_trend_multi.csv')
-    df = pd.read_csv('12_seas_resid_multi.csv')
+    #df = pd.read_csv('12_seas_resid_multi.csv')
+    df = pd.read_csv('12_trend_resid_multi.csv')
     
     df.set_index('Date', inplace=True)
     df.index = pd.DatetimeIndex(df.index)
@@ -166,7 +174,7 @@ def main():
 
     # Prepare multivariate data for modeling
     n_steps_in = 7
-    n_steps_out = 90
+    n_steps_out = 28
     X, y = split_sequence(dataset_train, n_steps_in, n_steps_out)
 
     #for i in range(len(X)):
@@ -176,10 +184,10 @@ def main():
     # Setup model
     n_features = X.shape[2]
     model = build_model(n_steps_in, n_steps_out, n_features,
-                        n_units=[50, 100])
+                        n_units=[10], bidir=True)
     
     # Train model
-    model.fit(X, y, epochs=2000, batch_size=400, verbose=1)
+    model.fit(X, y, epochs=10000, batch_size=366, verbose=1)
     
     # Make single step prediction
     x_input = dataset[-n_steps_in:, :-1]
