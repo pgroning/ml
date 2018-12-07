@@ -100,10 +100,10 @@ def build_model(n_steps_in, n_steps_out, n_features, n_units):
         for i in range(n_layers - 1):
             model.add(LSTM(n_units[i], activation='relu', return_sequences=True,
                            input_shape=(n_steps_in, n_features)))
-            model.add(Dropout(0.2))
+            model.add(Dropout(0.1))
         model.add(LSTM(n_units[-1], activation='relu'))
 
-    model.add(Dropout(0.2))
+    model.add(Dropout(0.1))
     model.add(Dense(units=n_steps_out))
     model.add(Activation('linear'))
     
@@ -157,10 +157,11 @@ def main():
     # Prepare multivariate data for modeling
     in_seq1 = data.reshape(len(data), 1)
     in_seq2 = xog.reshape(len(xog), 1)
-    in_seq3 = xog.reshape(len(xog2), 1)
-    in_seq4 = xog.reshape(len(xog3), 1)
+    in_seq3 = xog2.reshape(len(xog2), 1)
+    in_seq4 = xog3.reshape(len(xog3), 1)
     out_seq = data_shift.reshape(len(data_shift), 1)
     dataset = np.hstack((in_seq1, in_seq2, in_seq3, in_seq4, out_seq))
+    #dataset = np.hstack((in_seq1, in_seq2, in_seq3, out_seq))
     dataset_train = dataset[:-1, :] # Drop last datapoint
 
     # Prepare multivariate data for modeling
@@ -178,7 +179,7 @@ def main():
                         n_units=[50, 100])
     
     # Train model
-    model.fit(X, y, epochs=2000, batch_size=200, verbose=1)
+    model.fit(X, y, epochs=2000, batch_size=400, verbose=1)
     
     # Make single step prediction
     x_input = dataset[-n_steps_in:, :-1]
