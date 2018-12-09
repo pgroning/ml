@@ -32,8 +32,8 @@ def read_data():
     return df
 
 
-def decompose(df, model='multiplicative'):
-    ts_components = sm.tsa.seasonal_decompose(df, model)
+def decompose(df, model='multiplicative', frequency=7):
+    ts_components = sm.tsa.seasonal_decompose(df, model, freq=frequency, two_sided=False)
     ts_components.plot()
     plt.show()
     return ts_components
@@ -135,13 +135,20 @@ def fourier(t, k=1, m=365.25):
 def main():
 
     #df = read_data()
-    #ts_components = decompose(df, model='multiplicative')
+    #ts_components = decompose(df, model='multiplicative', frequency=7)
+
+    #weekly_removed = ts_components.observed / ts_components.seasonal
+    #ts_components = decompose(weekly_removed, model='multiplicative', frequency=365)
+
+    #yearly_removed = ts_components.observed / ts_components.seasonal
+
     #set_trace()
     #trend_forecast = forecast_trend(ts_components.trend.dropna())
     #y = subtract_trend(ts_components, trend_forecast)
     #y.to_csv('y_subtract.csv')
-
-    df = pd.read_csv('y_observed.csv')
+    
+    df = pd.read_csv('12_yw_removed.csv')
+    #df = pd.read_csv('y_observed.csv')
     #df = pd.read_csv('12_trend_multi.csv')
     #df = pd.read_csv('12_seas_resid_multi.csv')
     #df = pd.read_csv('12_trend_resid_multi.csv')
@@ -165,7 +172,12 @@ def main():
     xfourier = list()
     for i in range(ft.shape[1]):
         xfourier.append(ft[:, i].reshape(len(ft[:, i]), 1))
-    
+
+    ft7 = fourier(t, k=1, m=7)
+    xfourier7 = list()
+    for i in range(ft7.shape[1]):
+        xfourier7.append(ft7[:, i].reshape(len(ft7[:, i]), 1))
+        
     # time-trend
     time_trend = t.reshape(len(t), 1)
 
@@ -186,8 +198,12 @@ def main():
 
     # Prepare multivariate data for modeling
     x = data.reshape(len(data), 1)
+
+    st = list()
+    #st = [x for x in xfourier]
+    #for xf7 in xfourier7:
+    #    st.append(xf7)
     
-    st = [x for x in xfourier]
     st.append(time_trend)
     #st.append(year_day)
     #st.append(week_day)
@@ -197,7 +213,7 @@ def main():
     dataset_train = dataset[:-1, :] # Drop last datapoint
     
     # Prepare multivariate data for modeling
-    n_steps_in = 7
+    n_steps_in = 30
     n_steps_out = 30
     X, y = split_sequence(dataset_train, n_steps_in, n_steps_out)
 
@@ -206,12 +222,13 @@ def main():
     #set_trace()
         
     # Setup model
+    # 20
     n_features = X.shape[2]
     model = build_model(n_steps_in, n_steps_out, n_features,
-                        n_units=[10, 10], bidir=True)
+                        n_units=[20], bidir=True, dropout=0.2)
     
     # Train model
-    model.fit(X, y, epochs=2000, batch_size=366, verbose=1)
+    model.fit(X, y, epochs=3000, batch_size=730, verbose=1)
     
     # Make single step prediction
     x_input = dataset[-n_steps_in:, :-1]
