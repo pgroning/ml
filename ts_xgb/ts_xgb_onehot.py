@@ -15,6 +15,7 @@ import numpy as np
 import scipy.stats as st
 
 import statsmodels.api as sm
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
@@ -24,7 +25,7 @@ with warnings.catch_warnings():
     
 def read_data():
     df = pd.read_csv('data/12.csv')
-    #df = pd.read_csv('data/10_1191.csv')
+    df = pd.read_csv('data/10_1191.csv')
     df = df.loc[:, 'Date':'Y']
     df.set_index('Date', inplace=True)
     df.index = pd.DatetimeIndex(df.index)
@@ -39,6 +40,7 @@ def fourier(t, k=1, m=365.25):
         x[:, i + 1] = np.sin(2 * np.pi * j / m * t)
         i += 2    
     return x
+
 
 def xgb_dataset(y_series, periods):
     # Create feature dataset for XGBoost
@@ -112,7 +114,7 @@ def xgb_forecast(df_train, df_forecast):
     # Create forecast
     X_forecast = df_forecast.drop('y', axis=1).values
     y_hat = model.predict(X_forecast)
-    df_yhat = pd.DataFrame(y_hat, index=df_forecast.index, columns=['yhat'])
+    df_yhat = pd.DataFrame(y_hat, index=df_forecast.index, columns=['remainder'])
 
     return df_yhat
     
@@ -120,12 +122,16 @@ def xgb_forecast(df_train, df_forecast):
 def main():
 
     df = read_data()
-
-    # Take logarithm of input data
-    df = np.log(df)
+    
+    # Shift and take logarithm of input data
+    if df.Y.min() < 0.01:
+        y_shift = 0.01 - df.Y.min()
+    else:
+        y_shift = 0
+    log_df = np.log(df + y_shift)
 
     # Remove trend from data
-    y_comps = sm.tsa.seasonal_decompose(df['Y'], model='add', two_sided=False, freq=365)
+    y_comps = sm.tsa.seasonal_decompose(log_df['Y'], model='add', two_sided=False, freq=365)
     y_trend = y_comps.trend.dropna()
     y_trend_split = sm.tsa.seasonal_decompose(y_trend, model='add', two_sided=False, freq=7)
 
@@ -134,26 +140,43 @@ def main():
 
     ts_trend.dropna(inplace=True)
     ts_remainder.dropna(inplace=True)
-
     
     # Forecast detrended time series with XGBoost
-    
     periods = 365
     df_hist, df_forecast = xgb_dataset(ts_remainder, periods=periods)
-    
     yhat = xgb_forecast(df_hist, df_forecast)
     
-    # Plot results
-    #ax = df_hist['y'].plot(c='b')
+    # Plot remainder forecast
+    plt.figure(1)
     ax = ts_remainder.plot(c='b')
-    yhat.plot(ax=ax, c='r')
+    yhat.remainder.plot(ax=ax, c='r')
+    #plt.show()
+
+    
+    # Forecast trend with Exponential smoothing
+    
+    ets_model = ExponentialSmoothing(ts_trend, trend='additive', seasonal=None,
+                                     damped=True, freq='D')
+    ets_model_fit = ets_model.fit()
+    yhat_trend = ets_model_fit.forecast(periods)
+    yhat['trend'] = yhat_trend
+
+    # Plot trend forecast
+    plt.figure(2)
+    ax = ts_trend.plot(c='b')
+    yhat.trend.plot(ax=ax, c='r')
+    #plt.show()
+
+
+    # Add trend and remainder components
+    yhat['log_total'] = yhat.trend + yhat.remainder
+    yhat['total'] = np.exp(yhat.log_total) - y_shift
+    
+    # Plot
+    plt.figure(3)
+    ax = df.Y.plot(c='b')
+    yhat.total.plot(ax=ax, c='r')
     plt.show()
-
-    
-    # Forecast trend with ARIMA or LSTM
-
-
-    
     set_trace()
     
 

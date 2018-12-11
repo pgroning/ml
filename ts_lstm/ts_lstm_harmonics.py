@@ -146,8 +146,13 @@ def main():
     #trend_forecast = forecast_trend(ts_components.trend.dropna())
     #y = subtract_trend(ts_components, trend_forecast)
     #y.to_csv('y_subtract.csv')
+
+    df_in = pd.read_csv('../ts_xgb/12_trend.csv')
+    df = pd.DataFrame(columns=['Date', 'Y'])
+    df.Date = df_in.iloc[:, 0]
+    df.Y = df_in.iloc[:, 1]
     
-    df = pd.read_csv('12_yw_removed.csv')
+    #df = pd.read_csv('12_yw_removed.csv')
     #df = pd.read_csv('y_observed.csv')
     #df = pd.read_csv('12_trend_multi.csv')
     #df = pd.read_csv('12_seas_resid_multi.csv')
@@ -159,7 +164,7 @@ def main():
     #plt.show()
 
     # log transform data
-    df['Y'] = np.log(df['Y'])
+    #df['Y'] = np.log(df['Y'])
     
     # Scaling data
     scaler = MinMaxScaler(feature_range=(-1, 1))
@@ -213,8 +218,8 @@ def main():
     dataset_train = dataset[:-1, :] # Drop last datapoint
     
     # Prepare multivariate data for modeling
-    n_steps_in = 30
-    n_steps_out = 30
+    n_steps_in = 1
+    n_steps_out = 60
     X, y = split_sequence(dataset_train, n_steps_in, n_steps_out)
 
     #for i in range(len(X)):
@@ -225,10 +230,10 @@ def main():
     # 20
     n_features = X.shape[2]
     model = build_model(n_steps_in, n_steps_out, n_features,
-                        n_units=[20], bidir=True, dropout=0.2)
+                        n_units=[10], bidir=True, dropout=0.2)
     
     # Train model
-    model.fit(X, y, epochs=3000, batch_size=730, verbose=1)
+    model.fit(X, y, epochs=5000, batch_size=400, verbose=1)
     
     # Make single step prediction
     x_input = dataset[-n_steps_in:, :-1]
